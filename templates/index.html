@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CloudLink</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a25;
+    --border: #2a2a3a;
+    --accent: #00e5ff;
+    --accent2: #7b2fff;
+    --text: #e8e8f0;
+    --muted: #6a6a80;
+    --success: #00e676;
+    --radius: 12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #join-screen {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    background: radial-gradient(ellipse at 30% 40%, rgba(0,229,255,0.06) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 70%, rgba(123,47,255,0.08) 0%, transparent 55%);
+  }
+
+  .join-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3rem;
+    width: 100%;
+    max-width: 440px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .join-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+
+  .logo { font-size: 2.2rem; font-weight: 800; letter-spacing: -1px; margin-bottom: 0.3rem; }
+  .logo span { color: var(--accent); }
+
+  .tagline {
+    color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    margin-bottom: 2.5rem;
+    letter-spacing: 1px;
+  }
+
+  label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.5rem;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.85rem 1rem;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.95rem;
+    margin-bottom: 1.2rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  input[type="text"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,229,255,0.1);
+  }
+
+  .btn-primary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 0.9rem;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: var(--radius);
+    font-family: 'Syne', sans-serif;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
+
+  .btn-primary:hover { background: #33eaff; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,229,255,0.25); }
+
+  #app { display: none; flex: 1; flex-direction: column; height: 100vh; }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.5rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    gap: 1rem;
+  }
+
+  .header-logo { font-size: 1.3rem; font-weight: 800; }
+  .header-logo span { color: var(--accent); }
+
+  .room-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.4rem 0.8rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+  }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .main {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-section { padding: 1rem; border-bottom: 1px solid var(--border); }
+
+  .sidebar-title {
+    font-size: 0.65rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.8rem;
+  }
+
+  .device-list { display: flex; flex-direction: column; gap: 0.4rem; }
+
+  .device-item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.6rem;
+    border-radius: 8px;
+    background: var(--surface2);
+    font-size: 0.85rem;
+  }
+
+  .device-icon {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; flex-shrink: 0; font-weight: 700; color: #000;
+  }
+
+  .device-name { font-weight: 600; font-size: 0.82rem; }
+  .device-time { font-family: 'Space Mono', monospace; font-size: 0.65rem; color: var(--muted); }
+
+  .files-section {
+    flex: 1;
+    padding: 1rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .file-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.8rem;
+    cursor: pointer;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+
+  .file-item:hover { border-color: var(--accent); transform: translateX(2px); }
+  .file-name { font-size: 0.82rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-meta { font-family: 'Space Mono', monospace; font-size: 0.62rem; color: var(--muted); margin-top: 0.15rem; }
+
+  .chat-area { display: flex; flex-direction: column; overflow: hidden; }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    scroll-behavior: smooth;
+  }
+
+  .msg {
+    max-width: 70%;
+    padding: 0.75rem 1rem;
+    border-radius: 14px;
+    animation: fadeUp 0.2s ease;
+  }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .msg.own {
+    align-self: flex-end;
+    background: linear-gradient(135deg, #0d3d4f, #102040);
+    border: 1px solid rgba(0,229,255,0.2);
+  }
+
+  .msg.other {
+    align-self: flex-start;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+  }
+
+  .msg.system {
+    align-self: center;
+    background: transparent;
+    border: none;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    max-width: 100%;
+    text-align: center;
+    padding: 0.25rem 0;
+  }
+
+  .msg-header { display: flex; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.3rem; align-items: baseline; }
+  .msg-sender { font-size: 0.72rem; font-weight: 600; color: var(--accent); }
+  .msg-time { font-family: 'Space Mono', monospace; font-size: 0.62rem; color: var(--muted); }
+  .msg-text { font-size: 0.9rem; line-height: 1.5; }
+
+  .msg.file-msg { display: flex; align-items: center; gap: 0.8rem; }
+
+  .file-icon-lg {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; flex-shrink: 0;
+  }
+
+  .file-dl-name { font-size: 0.85rem; font-weight: 600; }
+  .file-dl-meta { font-family: 'Space Mono', monospace; font-size: 0.65rem; color: var(--muted); }
+  .file-dl-link { color: var(--accent); font-size: 0.75rem; text-decoration: none; }
+  .file-dl-link:hover { text-decoration: underline; }
+
+  .input-bar {
+    padding: 1rem 1.5rem;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 0.6rem;
+    align-items: center;
+  }
+
+  .input-bar input[type="text"] { flex: 1; margin-bottom: 0; }
+
+  .btn-icon {
+    width: 46px; height: 46px;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s; flex-shrink: 0;
+  }
+
+  .btn-icon:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn-send {
+    width: 46px; height: 46px;
+    border-radius: var(--radius);
+    border: none;
+    background: var(--accent);
+    color: #000;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s; flex-shrink: 0; font-weight: 700;
+  }
+
+  .btn-send:hover { background: #33eaff; transform: scale(1.05); }
+
+  #file-input { display: none; }
+
+  .upload-toast {
+    position: fixed;
+    bottom: 5rem; right: 1.5rem;
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    padding: 0.8rem 1.2rem;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--accent);
+    display: none;
+    z-index: 999;
+  }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  @media (max-width: 640px) {
+    .main { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="join-screen">
+  <div class="join-card">
+    <div class="logo">Cloud<span>Link</span></div>
+    <div class="tagline">// GERAETE VERBINDEN · DATEN TEILEN</div>
+
+    <label>Dein Gerätename</label>
+    <input type="text" id="device-name" placeholder="z.B. Mein Handy" maxlength="30">
+
+    <label>Raum-Code</label>
+    <input type="text" id="room-code" placeholder="z.B. mein-raum-2024" maxlength="40">
+    <p style="font-size:0.72rem;color:var(--muted);margin-top:-0.8rem;margin-bottom:1.5rem;font-family:'Space Mono',monospace;">
+      Gleicher Code = gleicher Raum. Erfinde einfach einen!
+    </p>
+
+    <button class="btn-primary" onclick="joinRoom()">&#x2192;&nbsp; Verbinden</button>
+  </div>
+</div>
+
+<div id="app">
+  <header>
+    <div class="header-logo">Cloud<span>Link</span></div>
+    <div class="room-badge">
+      <div class="dot"></div>
+      <span id="header-room">—</span>
+    </div>
+    <div style="font-family:'Space Mono',monospace;font-size:0.75rem;color:var(--muted);" id="header-name">—</div>
+  </header>
+
+  <div class="main">
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-title">&#x25CF; Verbundene Geräte</div>
+        <div class="device-list" id="device-list"></div>
+      </div>
+      <div class="sidebar-title" style="padding:1rem 1rem 0.5rem;">&#x1F4CE; Dateien</div>
+      <div class="files-section" id="file-list"></div>
+    </div>
+
+    <div class="chat-area">
+      <div class="messages" id="messages"></div>
+      <div class="input-bar">
+        <input type="file" id="file-input" onchange="uploadFile(this)">
+        <button class="btn-icon" onclick="document.getElementById('file-input').click()" title="Datei senden">&#x1F4CE;</button>
+        <input type="text" id="msg-input" placeholder="Nachricht eingeben..." onkeydown="if(event.key==='Enter') sendMessage()">
+        <button class="btn-send" onclick="sendMessage()">&#x27A4;</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="upload-toast" id="upload-toast"></div>
+
+<script>
+  const socket = io();
+  let myName = '', myRoom = '';
+
+  function joinRoom() {
+    const name = document.getElementById('device-name').value.trim();
+    const room = document.getElementById('room-code').value.trim();
+    if (!name || !room) { alert('Bitte Namen und Raum-Code eingeben!'); return; }
+    myName = name;
+    myRoom = room;
+    document.getElementById('join-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('header-room').textContent = room;
+    document.getElementById('header-name').textContent = name;
+    socket.emit('join', { name, room });
+  }
+
+  function sendMessage() {
+    const input = document.getElementById('msg-input');
+    const text = input.value.trim();
+    if (!text) return;
+    socket.emit('message', { text });
+    input.value = '';
+  }
+
+  async function uploadFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const toast = document.getElementById('upload-toast');
+    toast.style.display = 'block';
+    toast.textContent = '\u23F3 ' + file.name + ' wird hochgeladen...';
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('uploader', myName);
+    fd.append('room', myRoom);
+    try {
+      const res = await fetch('/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      toast.textContent = data.success ? '\u2713 ' + file.name + ' hochgeladen!' : '\u2717 Fehler beim Upload';
+    } catch {
+      toast.textContent = '\u2717 Upload fehlgeschlagen';
+    }
+    setTimeout(() => { toast.style.display = 'none'; }, 3000);
+    input.value = '';
+  }
+
+  function addMessage(msg) {
+    const div = document.getElementById('messages');
+    const el = document.createElement('div');
+    const isOwn = msg.sid === socket.id;
+    el.className = 'msg ' + (isOwn ? 'own' : 'other');
+    el.innerHTML =
+      '<div class="msg-header"><span class="msg-sender">' + (isOwn ? 'Du' : esc(msg.sender)) + '</span><span class="msg-time">' + msg.timestamp + '</span></div>' +
+      '<div class="msg-text">' + esc(msg.text) + '</div>';
+    div.appendChild(el);
+    div.scrollTop = div.scrollHeight;
+  }
+
+  function addSystemMsg(text) {
+    const div = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = 'msg system';
+    el.textContent = text;
+    div.appendChild(el);
+    div.scrollTop = div.scrollHeight;
+  }
+
+  function addFileMsg(f) {
+    const div = document.getElementById('messages');
+    const el = document.createElement('div');
+    el.className = 'msg other file-msg';
+    el.innerHTML =
+      '<div class="file-icon-lg">\uD83D\uDCCE</div>' +
+      '<div><div class="file-dl-name">' + esc(f.original_name) + '</div>' +
+      '<div class="file-dl-meta">' + f.size_str + ' \u00B7 ' + f.timestamp + ' \u00B7 ' + esc(f.uploader) + '</div>' +
+      '<a class="file-dl-link" href="/download/' + f.id + '" target="_blank">\u2B07 Herunterladen</a></div>';
+    div.appendChild(el);
+    div.scrollTop = div.scrollHeight;
+  }
+
+  function renderDevices(devices) {
+    document.getElementById('device-list').innerHTML = devices.map(d =>
+      '<div class="device-item">' +
+      '<div class="device-icon">' + esc(d.name.charAt(0).toUpperCase()) + '</div>' +
+      '<div><div class="device-name">' + esc(d.name) + (d.sid === socket.id ? ' (Du)' : '') + '</div>' +
+      '<div class="device-time">seit ' + d.connected_at + '</div></div></div>'
+    ).join('');
+  }
+
+  function addFileToSidebar(f) {
+    const list = document.getElementById('file-list');
+    const el = document.createElement('div');
+    el.className = 'file-item';
+    el.innerHTML = '<div class="file-name">\uD83D\uDCCE ' + esc(f.original_name) + '</div><div class="file-meta">' + f.size_str + ' \u00B7 ' + esc(f.uploader) + '</div>';
+    el.onclick = () => window.open('/download/' + f.id, '_blank');
+    list.prepend(el);
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  socket.on('device_joined', data => { renderDevices(data.devices); addSystemMsg('\uD83D\uDD0C ' + data.name + ' ist beigetreten'); });
+  socket.on('device_left', data => { renderDevices(data.devices); addSystemMsg('\uD83D\uDC4B ' + data.name + ' hat den Raum verlassen'); });
+  socket.on('message', addMessage);
+  socket.on('new_file', f => { addFileMsg(f); addFileToSidebar(f); });
+  socket.on('file_history', files => { files.forEach(f => addFileToSidebar(f)); if (files.length) addSystemMsg('\uD83D\uDCC2 ' + files.length + ' Datei(en) im Raum'); });
+</script>
+</body>
+</html>
