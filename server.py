@@ -15,7 +15,7 @@ app.config['SECRET_KEY'] = 'cloudlink-secret-key'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB max
 
-socketio = SocketIO(app, cors_allowed_origins="*", max_http_buffer_size=100 * 1024 * 1024)
+socketio = SocketIO(app, cors_allowed_origins="*", max_http_buffer_size=100 * 1024 * 1024, async_mode='threading')
 
 connected_devices = {}
 uploaded_files = []
