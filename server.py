@@ -1,24 +1,18 @@
-"""
-CloudLink Server - Datei- und Nachrichtenaustausch zwischen Geräten
-Starten: python server.py
-Dann im Browser öffnen: http://localhost:5000
-"""
-
 from flask import Flask, render_template, request, send_from_directory, jsonify
-from flask_socketio import SocketIO, emit, join_room, leave_room
-import os
-import uuid
+from flask_socketio import SocketIO, emit, join_room
+import os, uuid
 from datetime import datetime
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'cloudlink-secret-key'
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB max
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
 
 socketio = SocketIO(app, cors_allowed_origins="*", max_http_buffer_size=100 * 1024 * 1024, async_mode='threading')
 
 connected_devices = {}
 uploaded_files = []
+room_passwords = {}  # {room: password}
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -26,6 +20,15 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 @app.route('/')
 def index():
     return render_template('index.html')
+
+
+@app.route('/check_room', methods=['POST'])
+def check_room():
+    data = request.json
+    room = data.get('room', '')
+    if room in room_passwords:
+        return jsonify({'exists': True})
+    return jsonify({'exists': False})
 
 
 @app.route('/upload', methods=['POST'])
@@ -80,6 +83,21 @@ def on_connect():
 def on_join(data):
     device_name = data.get('name', f'Geraet-{request.sid[:6]}')
     room = data.get('room', 'global')
+    password = data.get('password', '')
+
+    # Raum existiert bereits - Passwort prüfen
+    if room in room_passwords:
+        if room_passwords[room] != password:
+            emit('join_error', {'message': 'Falsches Passwort!'})
+            return
+
+    # Neuer Raum - Passwort setzen
+    else:
+        if not password:
+            emit('join_error', {'message': 'Bitte ein Passwort festlegen!'})
+            return
+        room_passwords[room] = password
+
     join_room(room)
     connected_devices[request.sid] = {
         'name': device_name,
@@ -87,6 +105,7 @@ def on_join(data):
         'connected_at': datetime.now().strftime('%H:%M:%S'),
         'sid': request.sid,
     }
+    emit('join_success', {})
     emit('device_joined', {
         'name': device_name,
         'sid': request.sid,
@@ -121,6 +140,9 @@ def on_disconnect():
             'sid': request.sid,
             'devices': get_room_devices(room),
         }, room=room)
+        # Raum-Passwort löschen wenn niemand mehr drin ist
+        if not get_room_devices(room):
+            room_passwords.pop(room, None)
         print(f'{device["name"]} hat die Verbindung getrennt')
 
 
@@ -147,8 +169,7 @@ if __name__ == '__main__':
     print("=" * 50)
     print("  CloudLink Server gestartet")
     print("  Oeffne http://localhost:5000 im Browser")
-    print("  Raum-Code an andere Geraete weitergeben!")
     print("=" * 50)
-    import os
-port = int(os.environ.get('PORT', 5000))
-socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
+    import os as _os
+    port = int(_os.environ.get('PORT', 5000))
+    socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
